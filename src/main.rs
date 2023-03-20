@@ -33,7 +33,6 @@ async fn main() {
 
 
 	let posts = &schema["graphql"]["user"]["edge_owner_to_timeline_media"]["edges"];
-	println!("{}", posts);
 
 	let posts_array = posts.as_array().unwrap();
 
@@ -42,15 +41,23 @@ async fn main() {
 		let post_schema = load_json(post_url.as_str(), &client).await;
 
 		if &post_schema["graphql"]["shortcode_media"]["__typename"] == "GraphImage" {
-			println!("skipped");
+			let url_src = post_schema["graphql"]["shortcode_media"]["display_url"].as_str().unwrap();
+			download_image(url_src, &client, &folder, 0).await;
 		}
-		else {
+		else if &post_schema["graphql"]["shortcode_media"]["__typename"] == "GraphSidecar" {
 			let mut i = 0;
 			for media in post_schema["graphql"]["shortcode_media"]["edge_sidecar_to_children"]["edges"].as_array().unwrap() {
 				let url_src = media["node"]["display_url"].as_str().unwrap();
 				download_image(url_src, &client, &folder, i).await;
 				i+=1;
 			}
+		}
+		else if &post_schema["graphql"]["shortcode_media"]["__typename"] == "GraphVideo" {
+			let url_src = post_schema["graphql"]["shortcode_media"]["video_url"].as_str().unwrap();
+			download_video(url_src, &client, &folder, 0).await;
+		}
+		else {
+			println!("unknown type");
 		}
 	}
 }
@@ -73,6 +80,16 @@ async fn download_image(url_to_download: &str, client: &reqwest::Client, folder:
 	file.write(resp.bytes().await.unwrap().as_ref()).unwrap();
 }
 
+async fn download_video(url_to_download: &str, client: &reqwest::Client, folder: &Path, inc: i32){
+	let date = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+	let output_name = "test";
+	let pic_path = format!("{}/{}{}-{}{}", folder.to_str().unwrap(), output_name, date, inc, ".mp4");
+
+	let mut file = File::create(pic_path).unwrap();
+	let resp = client.get(url_to_download).send().await.unwrap();
+	file.write(resp.bytes().await.unwrap().as_ref()).unwrap();
+}
+
 
 
 async fn load_json(url: &str, client: &reqwest::Client) -> serde_json::Value{
@@ -82,28 +99,33 @@ async fn load_json(url: &str, client: &reqwest::Client) -> serde_json::Value{
 	return parsed;
 }
 
+
 fn create_header(args: &Args)-> reqwest::header::HeaderMap {
 	let mut header = reqwest::header::HeaderMap::new();
-	let sessiondid_cookie = "sessionid=".to_owned() + args.sessionid.as_str();
-	header.insert(
-		reqwest::header::COOKIE,
-		reqwest::header::HeaderValue::from_str(sessiondid_cookie.as_str()).unwrap()
-	);
-	header.insert(
-		reqwest::header::ACCEPT,
-		reqwest::header::HeaderValue::from_static("*/*")
-	);
-	header.insert(
-		"X-IG-App-ID",
-		reqwest::header::HeaderValue::from_static("936619743392459")
-	);
-	header.insert(
-		"X-Requested-With",
-		reqwest::header::HeaderValue::from_static("XMLHttpRequest")
-	);
-	header.insert(
-		"X-Instagram-AJAX",
-		reqwest::header::HeaderValue::from_static("1")
-	);
+	//let sessiondid_cookie = "sessionid=".to_owned() + args.sessionid.as_str();
+	//header.insert(
+	//	reqwest::header::COOKIE,
+	//	reqwest::header::HeaderValue::from_str(sessiondid_cookie.as_str()).unwrap()
+	//);
+	//header.insert(
+	//	reqwest::header::ACCEPT,
+	//	reqwest::header::HeaderValue::from_static("*/*")
+	//);
+	//header.insert(
+	//	reqwest::header::ACCEPT_ENCODING,
+	//	reqwest::header::HeaderValue::from_static("gzip, deflate, br")
+	//);
+	//header.insert(
+	//	reqwest::header::ACCEPT_LANGUAGE,
+	//	reqwest::header::HeaderValue::from_static("en-US,en;q=0.5")
+	//);
+	//header.insert(
+	//	reqwest::header::UPGRADE_INSECURE_REQUESTS,
+	//	reqwest::header::HeaderValue::from_static("1")
+	//);
+	//header.insert(
+	//	reqwest::header::ACCEPT,
+	//	reqwest::header::HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	//);
 	return header;
 }
